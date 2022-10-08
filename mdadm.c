@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "mdadm.h"
 #include "jbod.h"
@@ -41,7 +42,7 @@ int mdadm_mount(void) {
 	{
 		return -1;
 	}
-	int op = jbod_op(JBOD_MOUNT()<<12, 0,0);
+        jbod_op(JBOD_MOUNT()<<12, 0,0);
 	jbod_operation(op,NULL);
 	mount = 1;
 	return 1;
@@ -54,7 +55,7 @@ int mdadm_unmount(void) {
 	{
 		return -1;
 	}
-	int op = jbod_op(JBOD_UNMOUNT()<<12, 0,0);
+        jbod_op(JBOD_UNMOUNT()<<12, 0,0);
 	jbod_operation(op,NULL);
 	mount = 1;
 	return 1;
@@ -90,19 +91,19 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	int cur_block = start_addr % 256 / 256;
 
 	//jbod operation to seek to block and disk, using packBytes
-	jbod_operation(pack_bytes(cur_disk,0,SEEK_TO_DISK,0),NULL);
-	jbod_operation(pack_bytes(0,cur_block,SEEK_TO_BLOCK,0),NULL);
+	jbod_operation(pack_bytes(cur_disk,0,JBOD_SEEK_TO_DISK,0),NULL);
+	jbod_operation(pack_bytes(0,cur_block,JBOD_SEEK_TO_BLOCK,0),NULL);
 
 	//forloop to go through and read from the devices
-	for(int x = 0; i<read_len; x += read_bytes)
+	for(int x = 0; x<read_len; x += read_bytes)
 	{
 		//set offset equal to current address modulus a disk space
 		offset = cur_addr % 256;
-		jbod_operation(pack_bytes(0,0,READ_BLOCK,0), *temp_buf);
+		jbod_operation(pack_bytes(0,0,JBOD_READ_BLOCK,0), (int*)temp_buf);
 		//check if it is a partial block
 		if(read_len<256)
 		{
-			mem_copy(*temp_buf[offset],read_buf[read_bytes],(read_len-read_bytes));
+		  memcpy(read_buf[read_bytes],temp_buf[offset],(read_len-read_bytes));
 			//if it ends in the middle of a block
 			if (read_len<256)
 			{
@@ -112,14 +113,14 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 		}
 		if(read_len == 256)
 		{
-			mem_copy(*temp_buf[0], read_buf[read_bytes],256);
+		        memcpy(read_buf[read_bytes],temp_buf[0],256);
 			read_bytes += 256;
 		}
-		curr_addr += read_bytes;
+		cur_addr += read_bytes;
 		if (read_bytes == 256) // how would we find the end of disk 
 		{
-			jbod_operation(pack_bytes(cur_disk,0,SEEK_TO_DISK,0),NULL);
-			jbod_operation(pack_bytes(0,cur_block,SEEK_TO_BLOCK,0),NULL);
+			jbod_operation(pack_bytes(cur_disk,0,JBOD_SEEK_TO_DISK,0),NULL);
+			jbod_operation(pack_bytes(0,cur_block,JBOD_SEEK_TO_BLOCK,0),NULL);
 		}
 	}
 	return read_bytes;
