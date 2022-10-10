@@ -13,17 +13,17 @@ extern int cur_block;
 extern int cur_disk;
 
 //write given op using command,diskID,clock ID
-uint32_t op(uint32_t diskID, uint32_t blockID, uint32_t cmmd, uint32_t rsvd)
+uint32_t op(uint32_t diskID, uint32_t blockID, uint32_t cmmd)
 {
 	//setup local value
-	uint32_t retval = 0x0, tempdiskID, tempblockID, tempcmmd, temprsvd;
+	uint32_t tempdiskID, tempblockID, tempcmmd;
 
 	
-	tempdiskID = (diskID&0xff) << 8;
-	tempblockID = blockID&0xff;
-	tempcmmd = cmmd&0xff << 12;
-	temprsvd = rsvd&0xff << 18;
-	retval = tempdiskID|tempblockID|tempcmmd|temprsvd;
+	tempdiskID = (diskID) << 8;
+	tempblockID = blockID;
+	tempcmmd = cmmd << 12;
+
+	uint32_t retval = tempdiskID|tempblockID|tempcmmd;
 
 	//return retval
 	return retval;
@@ -35,40 +35,39 @@ int jbod_operation(uint32_t op, uint8_t *block);
 
 //initialize mount
 int mount = 0;
+int jbod_op = 0;
 
 int mdadm_mount(void) {
+  int jbod_op = op(0,0,JBOD_MOUNT);
 	//if its not already been set to 1,
-	if(mount)
+  if(jbod_operation (jbod_op,NULL)== 0)
 	{
-		return -1;
+		mount = 1;
+		return 1;
 	}
-        op(JBOD_MOUNT<<12, 0,0);
-	jbod_operation(op,NULL);
-	mount = 1;
-	return 1;
-
+  else{	return -1;}
  }
 
 int mdadm_unmount(void) {
+  int jbod_op = op(0,0,JBOD_UNMOUNT);
 		//if its not already been set to 1,
-	if(!mount)
+  if(jbod_operation(jbod_op,NULL)==0)
 	{
-		return -1;
-	}
-        op(JBOD_UNMOUNT<<12, 0,0);
-	jbod_operation(op,NULL);
 	mount = 1;
 	return 1;
+	}
+  else{ return -1;}
 	
  }
 
 int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
+
 	//initialize variables
 	int read_bytes;
 	int cur_addr = start_addr;
 	//set temp to 256 bytes
-	int *temp_buf = malloc(sizeof(int)*64);
-	int *offset;
+	int8_t *temp_buf = malloc(sizeof(int)*64);
+	int offset;
 
 	// check for errors
 	if (!mount)
@@ -84,11 +83,16 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	{
 		return -1;
 	}
+	if(read_len ==0)
+        {
+	        return -1;
+	}
+       
 
 	//current disk using start address divided by disk size, then times disk size
-	int cur_disk = start_addr / 256 * 256;
+	int cur_disk = start_addr / 256;
 	//current block modulus 256 from start address, divided by disk size
-	int cur_block = start_addr % 256 / 256;
+	int cur_block = (start_addr % 256) / 256;
 
 	//jbod operation to seek to block and disk, using packBytes
 	jbod_operation(op(cur_disk,0,JBOD_SEEK_TO_DISK,0),NULL);
@@ -99,11 +103,11 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	{
 		//set offset equal to current address modulus a disk space
 		offset = cur_addr % 256;
-		jbod_operation(op(0,0,JBOD_READ_BLOCK,0), (int*)temp_buf);
+		jbod_operation(op(0,0,JBOD_READ_BLOCK,0), *temp_buf);
 		//check if it is a partial block
 		if(read_len<256)
 		{
-		  memcpy(read_buf[(*int)read_bytes],temp_buf[offset],(read_len-read_bytes));
+		  memcpy((read_buf+read_bytes),(temp_buf+offset),(read_len-read_bytes));
 			//if it ends in the middle of a block
 			if (read_len<256)
 			{
@@ -113,7 +117,7 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 		}
 		if(read_len == 256)
 		{
-		        memcpy(read_buf[read_bytes],temp_buf[(*int)0],256);
+		  memcpy((read_buf+read_bytes),temp_buf,256);
 			read_bytes += 256;
 		}
 		cur_addr += read_bytes;
@@ -124,4 +128,5 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 		}
 	}
 	return read_bytes;
+
 }
