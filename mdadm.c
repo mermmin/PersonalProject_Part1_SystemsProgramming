@@ -61,12 +61,12 @@ int mdadm_unmount(void) {
  }
 
 int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
-
-	//initialize variables
-	int read_bytes;
+  
+  	//initialize variables
+	int read_bytes=0;
 	int cur_addr = start_addr;
 	//set temp to 256 bytes
-	uint8_t temp_buf[JBOD_BLOCK_SIZE];
+	uint8_t temp_buf[256];
 	int offset;
 
 	// check for errors
@@ -74,11 +74,16 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	  {
 	    return 0;
 	  }
-	//if mount is unmounted again
-	if (!mount)
-	{
-		return -1;
-	}
+	//mount should fail on an anmounted system
+        if (mount)
+	  {
+	    return -1;
+	  }
+	if (read_len == 0)
+	  {
+	    return -1;
+	  }
+	
 	//of the length is bigger that a disk
 	if (read_len>2048)
 	{
@@ -89,21 +94,26 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	{
 		return -1;
 	}
-
-
+	//if read buf is equal to null and read length is not equal to 0
 	if(read_buf == NULL && read_len != 0)
 	  {
 	    return -1;
 	  }
-       
+
+	
+
+	
+	
 	//current disk using start address divided by disk size, then times disk size
-	int cur_disk = start_addr / 256;
+	int cur_disk = start_addr / 65536;
 	//current block modulus 256 from start address, divided by disk size
-	int cur_block = (start_addr % 256) / 256 ;
+	int cur_block = (start_addr % 65536) / 256 ;
 
 	//jbod operation to seek to block and disk, using packBytes
-	jbod_operation(op(cur_disk,0,JBOD_SEEK_TO_DISK),NULL);
-	jbod_operation(op(0,cur_block,JBOD_SEEK_TO_BLOCK),NULL);
+	int jbod_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
+	jbod_operation(jbod_disk,NULL);
+	int jbod_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
+	jbod_operation(jbod_block,NULL);
 
 
 	//forloop to go through and read from the devices
@@ -113,8 +123,9 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 
        	//set offset equal to current address modulus a disk space
        	offset = cur_addr % 256;
-	jbod_operation(op(0,0,JBOD_READ_BLOCK),temp_buf);
-	/*   	if(offset==0){
+	int op_read = op(0,0,JBOD_READ_BLOCK);
+	jbod_operation(op_read,temp_buf);
+	/*if(offset==0){
 	  if(read_len<JBOD_BLOCK_SIZE)
 	    {
 	      memcpy(read_buf+read_bytes,temp_buf,read_len-read_bytes);
@@ -127,7 +138,7 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	  }*/
 	  
        	//check if it is a partial block
-       	if(offset != 0)
+      	if(offset != 0)
        	{
 	  memcpy((read_buf+read_bytes),(temp_buf+offset),(read_len-read_bytes));
 	     	//if it ends in the middle of a block
@@ -136,37 +147,46 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 				read_bytes = read_len;
 			}
 		  
-		  else {read_bytes += 256 - offset;}
-	
-	 	if(read_len == 256)//if its a full block incrememtn read bytes 
-		{
-		  memcpy((read_buf+read_bytes),temp_buf,256);
-	       	read_bytes += JBOD_BLOCK_SIZE;
-		}
+		  else
+		    {
+		      read_bytes += 256 - offset;
+		    }
 	}
-	   if(offset==0){
+	 if(read_len == 256)//if its a full block incrememtn read bytes 
+	   {
+
+	     memcpy((read_buf+read_bytes),temp_buf+0,256);
+	     read_bytes += 256;
+	   }
+       	
+	 if(offset==0)
+	   {
+	     memcpy(read_buf+read_bytes,temp_buf,read_len);
 	       if(read_len<JBOD_BLOCK_SIZE)
 	    {
-	      memcpy(read_buf+read_bytes,temp_buf,256);
 	      read_bytes = read_len;
 	    }
-	  else{
-	    memcpy((read_buf+read_bytes),temp_buf,256);
+	  else{;
 	      read_bytes +=256;
 	  }
 	   }
+	       
+	
        	cur_addr += read_bytes;
 
-       	cur_disk = cur_addr/JBOD_BLOCK_SIZE;
-       	cur_block = (cur_addr%JBOD_BLOCK_SIZE) /JBOD_DISK_SIZE;
-		
-           	jbod_operation(op(cur_disk,0,JBOD_SEEK_TO_DISK),NULL);
-             	jbod_operation(op(0,cur_block,JBOD_SEEK_TO_BLOCK),NULL);
-		       
-	}
+       	cur_disk = cur_addr/JBOD_DISK_SIZE;
+       	cur_block = (cur_addr%JBOD_DISK_SIZE) /JBOD_BLOCK_SIZE;
 	
-
-	return read_bytes;
+	int update_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
+         jbod_operation(update_disk,NULL);
+	 int update_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
+         jbod_operation(update_block,NULL);
+		       
+	 }
+	
+	
+	 return read_bytes;
+      
 
 }
 
