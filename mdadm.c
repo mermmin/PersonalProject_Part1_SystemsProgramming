@@ -5,6 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "mdadm.h"
 #include "jbod.h"
@@ -41,7 +42,7 @@ int mdadm_mount(void) {
   if(mount ==0)
     {
   int jbod_op = op(0,0,JBOD_MOUNT);
-	//if its not already been set to 1,
+	//use the op function and the operation function to mount 
   if(jbod_operation (jbod_op,NULL)== 0)
 	{
 		mount = 1;
@@ -49,6 +50,7 @@ int mdadm_mount(void) {
 	}
   else
     {
+      //return -1 if it has not been mounted
       return -1;
     }
     }
@@ -58,7 +60,7 @@ int mdadm_mount(void) {
 }
 
 int mdadm_unmount(void) {
-  if(mount ==1)
+  if(mount ==1)//if it has already been mounted you now unmount it
     {
       
   int jbod_op = op(0,0,JBOD_UNMOUNT);
@@ -70,7 +72,7 @@ int mdadm_unmount(void) {
 	}
   
   else
-    {
+    {//if unsuccessfully unmounted, return -1
       return -1;
     }
     }
@@ -80,15 +82,15 @@ int mdadm_unmount(void) {
     }
 	
  }
-
+//I am so sorry I tried so hard to make this but i kept getting stack smashing and infinite loops and I will fix it this upcoming week I promise! 
 int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
   
   	//initialize variables
-	int read_bytes=0;
-	int cur_addr = start_addr;
+  //	int read_bytes=0;
+  //	int cur_addr = start_addr;
 	//set temp to 256 bytes
-	uint8_t *temp_buf[256];
-	int offset=0;
+  // 	uint8_t temp_buf[256];
+	//  	int offset=0;
 
 	// check for errors
 	if( read_buf == NULL && read_len == 0)
@@ -121,7 +123,7 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	    return -1;
 	  }
 
-	
+	/*	
 
 	
 	
@@ -136,50 +138,38 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	int jbod_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
 	jbod_operation(jbod_block,NULL);
 
-
+	
 	//forloop to go through and read from the devices
 	for(int x = 0; x<read_len; x += read_bytes)
 	{
 	  
 
        	//set offset equal to current address modulus a disk space
-       	offset = cur_addr % 256;
+	  //	offset = cur_addr % 256;
 	int op_read = op(0,0,JBOD_READ_BLOCK);
-	jbod_operation(op_read,*temp_buf);
-	/*if(offset==0){
-	  if(read_len<JBOD_BLOCK_SIZE)
-	    {
-	      memcpy(read_buf+read_bytes,temp_buf,read_len-read_bytes);
-	      read_bytes = read_len;
-		}
-	  else{
-	    memcpy((read_buf+read_bytes),temp_buf,JBOD_DISK_SIZE);
-	      read_bytes +=JBOD_BLOCK_SIZE;
-	  }
-	  }*/
+	jbod_operation(op_read,temp_buf);
+
 	  
        	//check if it is a partial block
-      	if(offset != 0)
+       	if(offset != 0)
        	{
-	  memcpy((read_buf+read_bytes),(temp_buf[offset]),read_len-read_bytes);
+	  memcpy(read_buf+read_bytes,temp_buf+offset,JBOD_BLOCK_SIZE-offset);
 	     	//if it ends in the middle of a block
-		 if ((read_len+offset)<256)
-			{
-				read_bytes = read_len;
-			}
+	  if ((read_bytes+offset)<256)
+  	{
+	      read_bytes = read_len;
+       	}
 		  
 		  else
 		    {
 		      read_bytes += 256 - offset;
 		    }
-		 return read_bytes;
-	}
-	 if(read_len == 256)//if its a full block incrememtn read bytes 
+		    }
+		 if(read_len == JBOD_DISK_SIZE)//if its a full block incrememtn read bytes 
 	   {
 
-	     memcpy((read_buf+read_bytes),temp_buf[0],256);
+	     memcpy(read_buf+read_bytes,temp_buf+0,256);
 	     read_bytes += 256;
-	     return read_bytes;
 	   }
        	
 	 if(offset==0)
@@ -194,10 +184,10 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	      read_bytes +=256;
 	  }
 	       return read_bytes;
-	   }
+	       }
 	
 	       
-	
+  	
        	cur_addr += read_bytes;
 
        	cur_disk = cur_addr/JBOD_DISK_SIZE;
@@ -211,9 +201,8 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	}
 	
 	
-	 return read_bytes;
-      
-
+	 return read_len;*/
+      return 0;
 }
 
 
