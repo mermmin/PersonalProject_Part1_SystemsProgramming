@@ -128,8 +128,9 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	int read_bytes = 0;
 	//set temp to 256 bytes
   	uint8_t temp_buf[256];
+      	//make a need to read variable for the remainders
       	int need_to_read = 0;
-	
+	//while loop to  see if the read length is greater than what has been read
 	while(read_bytes < read_len)
 	{
 
@@ -140,26 +141,28 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	jbod_operation(jbod_block,NULL);
 	int jbod_read = op(0,0,JBOD_READ_BLOCK);
 	jbod_operation(jbod_read,temp_buf);
-	
+	//set need to read to remainder of read
 	need_to_read = read_len - read_bytes;
-	
+	//if offset plus remainder is less than a block
 		if(offset+need_to_read<256)
 		{
+		//do mem copy for strating place to the rest of block
 			memcpy(read_buf+read_bytes,temp_buf+offset,need_to_read);
 			read_bytes += need_to_read;
 		}
+		//do the next block if initial one has not been completely read
 		else
 		{
 			memcpy(read_buf+read_bytes,temp_buf+offset,256-offset);
 			read_bytes += 256-offset;
 		}
 	
-  	
+  	//current address is added to the read_bytes
        	cur_addr += read_bytes;
-
+//update current disk and block
        	cur_disk = cur_addr/65536;
        	cur_block = cur_addr%65536 /256;
-	
+	//update the disk and block
 	int update_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
          jbod_operation(update_disk,NULL);
 	 int update_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
@@ -169,7 +172,7 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 		       
 	}
 	
-	
+	//return the final bytes read
 	 return read_bytes;
 }
 
