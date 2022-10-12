@@ -84,13 +84,7 @@ int mdadm_unmount(void) {
  }
 //I am so sorry I tried so hard to make this but i kept getting stack smashing and infinite loops and I will fix it this upcoming week I promise! 
 int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
-  
-  	//initialize variables
-  //	int read_bytes=0;
-  //	int cur_addr = start_addr;
-	//set temp to 256 bytes
-  // 	uint8_t temp_buf[256];
-	//  	int offset=0;
+
 
 	// check for errors
 	if( read_buf == NULL && read_len == 0)
@@ -123,68 +117,183 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
 	    return -1;
 	  }
 
-	/*	
-
 	
-	
+	 //initialize variables
+  	int cur_addr = start_addr;
 	//current disk using start address divided by disk size, then times disk size
 	int cur_disk = start_addr / 65536;
 	//current block modulus 256 from start address, divided by disk size
-	int cur_block = start_addr % 65536/ 256 ;
+	int cur_block = start_addr % 65536 / 256 ;
+	int offset = cur_addr % 256;
+	int read_bytes = 0;
+	//set temp to 256 bytes
+  	uint8_t temp_buf[256];
+      	int need_to_read = 0;
+	
+	while(read_bytes < read_len)
+	{
 
 	//jbod operation to seek to block and disk, using packBytes
 	int jbod_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
 	jbod_operation(jbod_disk,NULL);
 	int jbod_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
 	jbod_operation(jbod_block,NULL);
-
+	int jbod_read = op(0,0,JBOD_READ_BLOCK);
+	jbod_operation(jbod_read,temp_buf);
 	
-	//forloop to go through and read from the devices
-	for(int x = 0; x<read_len; x += read_bytes)
+	need_to_read = read_len - read_bytes;
+	
+		if(offset+need_to_read<256)
+		{
+			memcpy(read_buf+read_bytes,temp_buf+offset,need_to_read);
+			read_bytes += need_to_read;
+		}
+		else
+		{
+			memcpy(read_buf+read_bytes,temp_buf+offset,256-offset);
+			read_bytes += 256-offset;
+		}
+	
+  	
+       	cur_addr += read_bytes;
+
+       	cur_disk = cur_addr/65536;
+       	cur_block = cur_addr%65536 /256;
+	
+	int update_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
+         jbod_operation(update_disk,NULL);
+	 int update_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
+         jbod_operation(update_block,NULL);
+         offset = 0;
+         
+		       
+	}
+	
+	
+	 return read_bytes;
+}
+
+/*
+//forloop to go through and read from the devices
+	for(int x = 0; x<read_len; x +=read_len)
 	{
 	  
-
+	  printf("loop %d\n",x);
        	//set offset equal to current address modulus a disk space
-	  //	offset = cur_addr % 256;
+	 offset = cur_addr % 256;
 	int op_read = op(0,0,JBOD_READ_BLOCK);
 	jbod_operation(op_read,temp_buf);
 
-	  
+	  printf("%d offset: %d",cur_addr, offset);
        	//check if it is a partial block
-       	if(offset != 0)
-       	{
-	  memcpy(read_buf+read_bytes,temp_buf+offset,JBOD_BLOCK_SIZE-offset);
+       		if(offset == 0)
+       		{
+       		printf("curr addr: %d , offset: %d",cur_addr,offset);
+	 	 memcpy(read_buf+read_bytes,temp_buf+offset,read_len-read_bytes);
 	     	//if it ends in the middle of a block
-	  if ((read_bytes+offset)<256)
-  	{
-	      read_bytes = read_len;
-       	}
+	 		 if (read_bytes+offset<256)
+  			{
+  
+	      		read_bytes = read_len;
+	      		printf("%d--", read_bytes);
+       			}
 		  
-		  else
-		    {
-		      read_bytes += 256 - offset;
-		    }
-		    }
-		 if(read_len == JBOD_DISK_SIZE)//if its a full block incrememtn read bytes 
-	   {
-
-	     memcpy(read_buf+read_bytes,temp_buf+0,256);
-	     read_bytes += 256;
-	   }
+			 else
+			 {
+		      	read_bytes += 256 - offset;
+		 	}
+		}	
+	 	if(read_len == 256)//if its a full block incrememtn read bytes 
+	   	{
+	     	memcpy(read_buf+read_bytes,temp_buf+0,256);
+	     	read_bytes += 256;
+	   	}
        	
-	 if(offset==0)
-	   {
-	     memcpy(read_buf+read_bytes,temp_buf[0],JBOD_BLOCK_SIZE);
-	       if(read_len<JBOD_BLOCK_SIZE)
-	    {
-	      read_bytes = read_len;
-	      return read_bytes;
-	    }
-	  else{
-	      read_bytes +=256;
-	  }
-	       return read_bytes;
-	       }
+	  	if(offset==0)
+	  	 {
+	     	memcpy(read_buf+read_bytes,temp_buf,read_len);
+	      	 if(read_len<JBOD_BLOCK_SIZE)
+	    	{
+	      	read_bytes = read_len;
+	      	free(temp_buf);
+	     	 return read_bytes;
+	    	}
+	  	else
+	  	{
+	      	read_bytes +=256;
+	  	}
+	     
+	  
+	
+       	cur_addr += read_bytes;
+
+       	cur_disk = cur_addr/JBOD_DISK_SIZE;
+       	cur_block = (cur_addr%JBOD_DISK_SIZE) /JBOD_BLOCK_SIZE;
+	
+	int update_disk = op(cur_disk,0,JBOD_SEEK_TO_DISK);
+         jbod_operation(update_disk,NULL);
+	 int update_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
+         jbod_operation(update_block,NULL);
+         
+         printf("%d\n", read_bytes);
+		       
+	}
+	
+	
+	 return read_len;
+}
+
+
+//forloop to go through and read from the devices
+	for(int x = 0; x<read_len; x +=read_len)
+	{
+	  
+	  printf("loop %d\n",x);
+       	//set offset equal to current address modulus a disk space
+	 offset = cur_addr % 256;
+	int op_read = op(0,0,JBOD_READ_BLOCK);
+	jbod_operation(op_read,temp_buf);
+
+	  printf("%d offset: %d",cur_addr, offset);
+       	//check if it is a partial block
+       		if(offset == 0)
+       		{
+       		printf("curr addr: %d , offset: %d",cur_addr,offset);
+	 	 memcpy(read_buf+read_bytes,temp_buf+offset,read_len-read_bytes);
+	     	//if it ends in the middle of a block
+	 		 if (read_bytes+offset<256)
+  			{
+  
+	      		read_bytes = read_len;
+	      		printf("%d--", read_bytes);
+       			}
+		  
+			 else
+			 {
+		      	read_bytes += 256 - offset;
+		 	}
+		}	
+	 	if(read_len == 256)//if its a full block incrememtn read bytes 
+	   	{
+	     	memcpy(read_buf+read_bytes,temp_buf+0,256);
+	     	read_bytes += 256;
+	   	}
+       	
+	  	if(offset==0)
+	  	 {
+	     	memcpy(read_buf+read_bytes,temp_buf,read_len);
+	      	 if(read_len<JBOD_BLOCK_SIZE)
+	    	{
+	      	read_bytes = read_len;
+	      	free(temp_buf);
+	     	 return read_bytes;
+	    	}
+	  	else
+	  	{
+	      	read_bytes +=256;
+	  	}
+	     
+	  
 	
 	       
   	
@@ -197,12 +306,11 @@ int mdadm_read(uint32_t start_addr, uint32_t read_len, uint8_t *read_buf)  {
          jbod_operation(update_disk,NULL);
 	 int update_block = op(0,cur_block,JBOD_SEEK_TO_BLOCK);
          jbod_operation(update_block,NULL);
+         
+         printf("%d\n", read_bytes);
 		       
 	}
 	
 	
-	 return read_len;*/
-      return 0;
-}
-
-
+	 return read_len;
+*/
